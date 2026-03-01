@@ -197,6 +197,10 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 COPY clipboard-shim.sh /usr/local/bin/xclip
 RUN chmod +x /usr/local/bin/xclip
 
+# Audio bridge shim
+COPY audio-play.sh /usr/local/bin/agentbox-play
+RUN chmod +x /usr/local/bin/agentbox-play
+
 # Set the user for runtime
 USER ${USERNAME}
 

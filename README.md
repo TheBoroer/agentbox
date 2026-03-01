@@ -11,6 +11,7 @@ A container-based development environment for running agentic coding tools in a 
 - **Unified Development Environment**: Single container image with Python, Node.js, Java, and Shell support
 - **Isolated SSH**: Dedicated SSH directory for secure Git operations
 - **Clipboard Image Support**: On macOS and Windows (WSL2), clipboard images are bridged into the container, enabling image paste in Claude Code
+- **Audio Bridge**: On macOS and Windows (WSL2), `agentbox-play <path>` inside the container plays sound files on the host — useful for notification hooks
 - **Low-Maintenance Philosophy**: Always uses latest LTS tool versions, rebuilds container automatically when necessary
 
 ## Requirements

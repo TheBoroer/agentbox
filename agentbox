@@ -23,6 +23,8 @@ readonly DOCKERFILE_PATH="${SCRIPT_DIR}/Dockerfile"
 readonly ENTRYPOINT_PATH="${SCRIPT_DIR}/entrypoint.sh"
 readonly CLIPBOARD_SHIM_PATH="${SCRIPT_DIR}/clipboard-shim.sh"
 readonly CLIPBOARD_WATCHER_PATH="${SCRIPT_DIR}/clipboard-watcher.sh"
+readonly AUDIO_PLAY_PATH="${SCRIPT_DIR}/audio-play.sh"
+readonly AUDIO_BRIDGE_PATH="${SCRIPT_DIR}/audio-bridge.sh"
 readonly IMAGE_NAME="agentbox:latest"
 readonly CONTAINER_PREFIX="agentbox"
 
@@ -87,7 +89,8 @@ needs_rebuild() {
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
     local shim_hash=$(calculate_hash "$CLIPBOARD_SHIM_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}"
+    local audio_shim_hash=$(calculate_hash "$AUDIO_PLAY_PATH")
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}-${audio_shim_hash}"
 
     # Check if image exists
     if ! $RUNTIME image inspect "$IMAGE_NAME" &> /dev/null; then
@@ -111,7 +114,8 @@ build_image() {
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
     local shim_hash=$(calculate_hash "$CLIPBOARD_SHIM_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}"
+    local audio_shim_hash=$(calculate_hash "$AUDIO_PLAY_PATH")
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}-${audio_shim_hash}"
 
     log_build "Building AgentBox image (this may take a few minutes on first run)..."
 
@@ -454,6 +458,17 @@ run_container() {
         log_info "Clipboard image bridge started"
     fi
 
+    # Start audio bridge (macOS or WSL2)
+    local audio_bridge_pid=""
+    local audio_dir=""
+    if [[ "$OSTYPE" == darwin* ]] || { [[ -f /proc/version ]] && grep -qi microsoft /proc/version; }; then
+        audio_dir=$(mktemp -d)
+        "$AUDIO_BRIDGE_PATH" "$audio_dir" &
+        audio_bridge_pid=$!
+        mount_opts+=(-v "${audio_dir}:/home/agent/.agentbox-audio")
+        log_info "Audio bridge started"
+    fi
+
     # Run ephemeral container with --rm
     local container_exit=0
     $RUNTIME run -it --rm \
@@ -473,6 +488,12 @@ run_container() {
         kill "$watcher_pid" 2>/dev/null || true
         wait "$watcher_pid" 2>/dev/null || true
         rm -rf "$PROJECT_DIR/.agentbox-clipboard" 2>/dev/null || true
+    fi
+
+    if [[ -n "$audio_bridge_pid" ]]; then
+        kill "$audio_bridge_pid" 2>/dev/null || true
+        wait "$audio_bridge_pid" 2>/dev/null || true
+        rm -rf "$audio_dir" 2>/dev/null || true
     fi
 
     return "$container_exit"
