@@ -21,6 +21,8 @@ readonly PROJECT_DIR="$(pwd)"
 readonly PROJECT_NAME="$(basename "$PROJECT_DIR")"
 readonly DOCKERFILE_PATH="${SCRIPT_DIR}/Dockerfile"
 readonly ENTRYPOINT_PATH="${SCRIPT_DIR}/entrypoint.sh"
+readonly CLIPBOARD_SHIM_PATH="${SCRIPT_DIR}/clipboard-shim.sh"
+readonly CLIPBOARD_WATCHER_PATH="${SCRIPT_DIR}/clipboard-watcher.sh"
 readonly IMAGE_NAME="agentbox:latest"
 readonly CONTAINER_PREFIX="agentbox"
 
@@ -82,10 +84,10 @@ get_container_name() {
 
 # Check if image needs rebuild
 needs_rebuild() {
-    # Calculate current Dockerfile and entrypoint hashes
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+    local shim_hash=$(calculate_hash "$CLIPBOARD_SHIM_PATH")
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}"
 
     # Check if image exists
     if ! $RUNTIME image inspect "$IMAGE_NAME" &> /dev/null; then
@@ -108,7 +110,8 @@ needs_rebuild() {
 build_image() {
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+    local shim_hash=$(calculate_hash "$CLIPBOARD_SHIM_PATH")
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}"
 
     log_build "Building AgentBox image (this may take a few minutes on first run)..."
 
@@ -441,7 +444,18 @@ run_container() {
         runtime_args+=(--userns=keep-id)
     fi
 
+    # Start clipboard image bridge (macOS or WSL2)
+    local watcher_pid=""
+    if [[ "$OSTYPE" == darwin* ]] || { [[ -f /proc/version ]] && grep -qi microsoft /proc/version; }; then
+        local clipboard_dir="$PROJECT_DIR/.agentbox-clipboard"
+        mkdir -p "$clipboard_dir"
+        "$CLIPBOARD_WATCHER_PATH" "$clipboard_dir" &
+        watcher_pid=$!
+        log_info "Clipboard image bridge started"
+    fi
+
     # Run ephemeral container with --rm
+    local container_exit=0
     $RUNTIME run -it --rm \
         --name "$container_name" \
         --hostname "agentbox-$PROJECT_NAME" \
@@ -453,7 +467,15 @@ run_container() {
         -w "$PROJECT_DIR" \
         --init \
         "$IMAGE_NAME" \
-        "${container_cmd[@]}"
+        "${container_cmd[@]}" || container_exit=$?
+
+    if [[ -n "$watcher_pid" ]]; then
+        kill "$watcher_pid" 2>/dev/null || true
+        wait "$watcher_pid" 2>/dev/null || true
+        rm -rf "$PROJECT_DIR/.agentbox-clipboard" 2>/dev/null || true
+    fi
+
+    return "$container_exit"
 }
 
 # Show help

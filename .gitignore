@@ -20,6 +20,9 @@ Thumbs.db
 # Docker
 .dockerignore.local
 
+# Clipboard bridge temp directory
+.agentbox-clipboard/
+
 # Logs
 *.log
 

@@ -193,6 +193,10 @@ USER root
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# xclip shim for clipboard image bridge
+COPY clipboard-shim.sh /usr/local/bin/xclip
+RUN chmod +x /usr/local/bin/xclip
+
 # Set the user for runtime
 USER ${USERNAME}
 
