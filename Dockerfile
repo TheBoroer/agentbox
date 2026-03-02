@@ -194,11 +194,11 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # xclip shim for clipboard image bridge
-COPY clipboard-shim.sh /usr/local/bin/xclip
+COPY bridges/clipboard-shim.sh /usr/local/bin/xclip
 RUN chmod +x /usr/local/bin/xclip
 
 # Audio bridge shim
-COPY audio-play.sh /usr/local/bin/agentbox-play
+COPY bridges/audio-play.sh /usr/local/bin/agentbox-play
 RUN chmod +x /usr/local/bin/agentbox-play
 
 # Set the user for runtime
