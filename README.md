@@ -22,6 +22,7 @@ A container-based development environment for running agentic coding tools in a 
 ## Container Runtime
 
 AgentBox works with Docker or Podman. The runtime is automatically detected:
+
 - Docker is used if available and running
 - Podman is used if Docker is unavailable
 - Error if neither is available
@@ -30,10 +31,10 @@ No configuration needed - just install either runtime.
 
 ## Installation and Quick Start
 
-1. Clone AgentBox to your preferred location (e.g. `~/code/agentbox/agentbox`)
+1. Clone this repository to your preferred location (e.g. `~/agentbox`)
 2. Ensure Docker or Podman is installed and running
-3. Make the script executable: `chmod +x agentbox`
-4. (Strongly recommended) add an alias for global access - e.g. alias `agentbox` to `~/code/agentbox/agentbox`.
+3. Make the script executable: `chmod +x ~/agentbox/agentbox`
+4. (Strongly recommended) add an alias for global access - e.g. alias `agentbox` to `~/agentbox/agentbox`.
 5. Run `agentbox` from your desired working directory (wherever you would normally start your agentic coding tool).
 
 ## CLI Agent Support
@@ -45,6 +46,7 @@ No configuration needed - just install either runtime.
 ### Adding tools
 
 Start your coding agent in the agentbox directory and issue this (example) prompt:
+
 > Add support for Copilot CLI to this project using the instructions at @docs/prompts/add-tool.md.
 
 Then you can go to your project directory and run (e.g.) `agentbox --tool copilot`. Thanks to [Felix Medam](https://github.com/SputnikTea) for this very cool idea.
@@ -114,7 +116,9 @@ The unified container image includes:
 ## Authenticating to Git or other SCC Providers
 
 ### GitHub
+
 The `gh` tool is included in the image and can be used for all GitHub operations. My recommendation:
+
 - Visit this link to configure a [fine-grained access-token](https://github.com/settings/personal-access-tokens/new?name=MyRepo-AI&description=For%20AI%20Agent%20Usage&contents=write&pull_requests=write&issues=write) with a sensible set of permissions predefined.
 - On that page, restrict the token to the project repository.
 - Create a .env file at the root of your project repository with entry `GH_TOKEN=<token>`
@@ -123,7 +127,8 @@ The `gh` tool is included in the image and can be used for all GitHub operations
 You or your agent should convert ssh git remotes to https, ssh remotes don't work with tokens.
 
 ### GitLab
- The `glab` tool is included in the image. You can use it with a GitLab token for API operations, but not for git operations as far as I know. So for GitLab I recommend the SSH configuration detailed below.
+
+The `glab` tool is included in the image. You can use it with a GitLab token for API operations, but not for git operations as far as I know. So for GitLab I recommend the SSH configuration detailed below.
 
 ## Git Configuration
 
@@ -139,12 +144,15 @@ agentbox ssh-init
 ```
 
 This will:
+
 1. Create ~/.agentbox/ssh/ directory
 2. Copy your known_hosts for host verification
 3. Generate a new Ed25519 key pair (if preferred, delete them and manually place your desired SSH keys in `~/.agentbox/ssh/`).
 
 ### Environment Variables
+
 Environment variables are loaded from `.env` files in this order (later overrides earlier):
+
 1. `~/.agentbox/.env` (global)
 2. `<project-dir>/.env` (project-specific)
 
@@ -163,6 +171,7 @@ Due to [Claude Code bug #6130](https://github.com/anthropics/claude-code/issues/
 **Workaround options:**
 
 1. **Enable individual MCP servers interactively:**
+
    ```bash
    agentbox shell
    claude
@@ -173,13 +182,16 @@ Due to [Claude Code bug #6130](https://github.com/anthropics/claude-code/issues/
 ## Data Persistence
 
 ### Package Caches
+
 Package manager caches are stored in `~/.cache/agentbox/<container-name>/`:
+
 - npm packages: `~/.cache/agentbox/<container-name>/npm`
 - pip packages: `~/.cache/agentbox/<container-name>/pip`
 - Maven artifacts: `~/.cache/agentbox/<container-name>/maven`
 - Gradle cache: `~/.cache/agentbox/<container-name>/gradle`
 
 ### Shell History
+
 Zsh history is preserved in `~/.agentbox/projects/<container-name>/history`
 
 ### Tool Authentication
@@ -187,15 +199,18 @@ Zsh history is preserved in `~/.agentbox/projects/<container-name>/history`
 Both tools use bind mounts to share authentication across all AgentBox projects:
 
 **Claude CLI**:
+
 - `~/.claude` mounted at `/home/agent/.claude`
 
 **OpenCode**:
+
 - Config: `~/.config/opencode` mounted at `/home/agent/.config/opencode`
 - Auth: `~/.local/share/opencode` mounted at `/home/agent/.local/share/opencode`
 
 ## Advanced Usage
 
 ### Running One-Off Commands
+
 If you need to run a single command in the containerized environment without starting Claude CLI or an interactive shell:
 
 ```bash
@@ -204,33 +219,40 @@ agentbox npm test
 ```
 
 ### Rebuild Control
+
 ```bash
 # Force rebuild the container image
 agentbox --rebuild
 ```
 
 The image automatically rebuilds when:
+
 - Dockerfile or entrypoint.sh changes
 - Image is older than 48 hours (to get latest tool versions)
 
 ## Tool / Dependency Versions
+
 The Dockerfile is configured to pull the latest stable version of each tool (NVM, GitLab CLI, etc.) during the build process. This makes maintenance easy and ensures that we always use current software. It also means that rebuilding the container image may automatically result in newer versions of tools being installed, which could introduce unexpected behavior or breaking changes. If you require specific tool versions, consider pinning them in the Dockerfile.
 
 ## Alternatives
+
 ### Anthropic DevContainer
+
 Anthropic offers a [devcontainer](https://github.com/anthropics/claude-code/tree/main/.devcontainer) which achieves a similar goal. If you like devcontainers, that's a good option. Unfortunately, I find that devcontainers sometimes have weird bugs, problematic support in IntelliJ/Mac, or they are just more cumbersome to use (try switching to a recent project with a shortcut, for example). I don't want to force people to use a devcontainer if what they really want is safe YOLO-mode isolation - the simpler solution to the problem is just containers, hence, this project.
 
 ### Comparison with ClaudeBox
+
 AgentBox began as a simplified replacement for [ClaudeBox](https://github.com/RchGrav/claudebox). I liked the ClaudeBox project, but its complexity caused a lot of bugs and I found myself maintaning my own fork with my not-yet-merged PRs. It became easier for me to build something leaner for my own needs. Comparison:
 
-| Feature | AgentBox | ClaudeBox |
-|---------|----------|-----------|
-| Files | 3 core files | 20+ files |
-| Profiles | Single unified image | 20+ language profiles |
-| Container Management | Simple per-project | Advanced slot system |
-| Setup | Automatic | Manual configuration |
+| Feature              | AgentBox             | ClaudeBox             |
+| -------------------- | -------------------- | --------------------- |
+| Files                | 3 core files         | 20+ files             |
+| Profiles             | Single unified image | 20+ language profiles |
+| Container Management | Simple per-project   | Advanced slot system  |
+| Setup                | Automatic            | Manual configuration  |
 
 ## Support and Contributing
+
 I make no guarantee to support this project in the future, however the history is positive: I've actively supported it since September 2025. Feel free to create issues and submit PRs. The project is designed to be understandable enough that if you need specific custom changes which we don't want centrally, you can fork or just make them locally for yourself.
 
 If you do contribute, consider that AgentBox is designed to be simple and maintainable. The value of new features will always be weighed against the added complexity. Try to find the simplest possible way to get things done and control the AI's desire to write such bloated doco.
