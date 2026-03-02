@@ -10,8 +10,8 @@ A container-based development environment for running agentic coding tools in a 
 - **Multi-Tool Support**: All agentic coding tools are supported, some built-in, others [via prompt](#adding-tools).
 - **Unified Development Environment**: Single container image with Python, Node.js, Java, and Shell support
 - **Isolated SSH**: Dedicated SSH directory for secure Git operations
-- **Clipboard Image Support**: On macOS and Windows (WSL2), clipboard images are bridged into the container, enabling image paste in Claude Code
-- **Audio Bridge**: On macOS and Windows (WSL2), `agentbox-play <path>` inside the container plays sound files on the host — useful for notification hooks
+- **Clipboard Image Support**: On macOS, use Cmd+Shift+C to save a clipboard image and copy its path, then Cmd+V to paste into Claude Code inside the container. Requires [one-time setup](#clipboard-image-support).
+- **Audio Bridge**: On macOS, `agentbox-play <path>` inside the container plays sound files on the host — useful for notification hooks
 - **Low-Maintenance Philosophy**: Always uses latest LTS tool versions, rebuilds container automatically when necessary
 
 ## Requirements
@@ -206,6 +206,24 @@ Both tools use bind mounts to share authentication across all AgentBox projects:
 
 - Config: `~/.config/opencode` mounted at `/home/agent/.config/opencode`
 - Auth: `~/.local/share/opencode` mounted at `/home/agent/.local/share/opencode`
+
+## Clipboard Image Support
+
+To paste screenshots into Claude Code running inside the container:
+
+1. Install the helper script and macOS Service:
+   ```bash
+   # Install helper script
+   mkdir -p ~/.agentbox
+   cp bridges/save-clipboard-image.sh ~/.agentbox/save-clipboard-image.sh
+   chmod +x ~/.agentbox/save-clipboard-image.sh
+
+   # Install Automator workflow
+   cp -r bridges/Save\ Clipboard\ Image.workflow ~/Library/Services/
+   ```
+2. Assign the keyboard shortcut: **System Settings > Keyboard > Keyboard Shortcuts > Services > General** — find "Save Clipboard Image" and assign **Cmd+Shift+C**.
+
+**Usage**: Take a screenshot, press Cmd+Shift+C (saves the image and copies its path), then Cmd+V in Claude Code to paste.
 
 ## Advanced Usage
 

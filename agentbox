@@ -304,6 +304,10 @@ run_container() {
         log_warning "SSH not configured. Run 'agentbox ssh-init' to enable SSH operations."
     fi
 
+    # Mount clipboard image directory (Cmd+Shift+C saves images here)
+    mkdir -p /tmp/clipboard-images
+    mount_opts+=(-v "/tmp/clipboard-images:/tmp/clipboard-images:ro")
+
     # Mount cache directories for package managers
     local cache_dir="${HOME}/.cache/agentbox/${container_name}"
     mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
@@ -448,9 +452,9 @@ run_container() {
         runtime_args+=(--userns=keep-id)
     fi
 
-    # Start clipboard image bridge (macOS or WSL2)
+    # Start clipboard image bridge (macOS only)
     local watcher_pid=""
-    if [[ "$OSTYPE" == darwin* ]] || { [[ -f /proc/version ]] && grep -qi microsoft /proc/version; }; then
+    if [[ "$OSTYPE" == darwin* ]]; then
         local clipboard_dir="$PROJECT_DIR/.agentbox-clipboard"
         mkdir -p "$clipboard_dir"
         "$CLIPBOARD_WATCHER_PATH" "$clipboard_dir" &
@@ -458,10 +462,10 @@ run_container() {
         log_info "Clipboard image bridge started"
     fi
 
-    # Start audio bridge (macOS or WSL2)
+    # Start audio bridge (macOS only)
     local audio_bridge_pid=""
     local audio_dir=""
-    if [[ "$OSTYPE" == darwin* ]] || { [[ -f /proc/version ]] && grep -qi microsoft /proc/version; }; then
+    if [[ "$OSTYPE" == darwin* ]]; then
         audio_dir=$(mktemp -d)
         "$AUDIO_BRIDGE_PATH" "$audio_dir" &
         audio_bridge_pid=$!

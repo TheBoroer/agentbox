@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# Host-side audio bridge for AgentBox.
-# Polls a shared directory for play requests and plays them using
-# platform-native commands. Uses regular files instead of FIFOs because
-# named pipes don't work across Docker's VM boundary on macOS.
-# Supports macOS (afplay) and Windows via WSL2 (PowerShell SoundPlayer).
+# Host-side audio bridge for AgentBox (macOS only).
+# Polls a shared directory for play requests and plays them using afplay.
+# Uses regular files instead of FIFOs because named pipes don't work
+# across Docker's VM boundary on macOS.
 
 set -euo pipefail
+
+if [[ "$OSTYPE" != darwin* ]]; then
+    echo "Unsupported platform: audio bridge requires macOS" >&2
+    exit 1
+fi
 
 audio_dir="$1"
 request_file="${audio_dir}/play.request"
@@ -16,21 +20,10 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT EXIT
 
-if [[ "$OSTYPE" == darwin* ]]; then
-    play_sound() {
-        pkill -x afplay 2>/dev/null || true
-        afplay "$1" &
-    }
-elif [[ -f /proc/version ]] && grep -qi microsoft /proc/version; then
-    play_sound() {
-        local win_path
-        win_path=$(wslpath -w "$1" 2>/dev/null) || return
-        powershell.exe -NoProfile -Command "(New-Object System.Media.SoundPlayer '$win_path').PlaySync()" &
-    }
-else
-    echo "Unsupported platform: audio bridge requires macOS or WSL2" >&2
-    exit 1
-fi
+play_sound() {
+    pkill -x afplay 2>/dev/null || true
+    afplay "$1" &
+}
 
 while true; do
     if [[ -f "$request_file" ]]; then

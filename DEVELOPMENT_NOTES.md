@@ -102,7 +102,7 @@ $PROJECT_DIR            # Project directory (mounted at full host path)
 3. **Permission Fixes**: Solve ZSH history permission issue properly
 4. **Debug Mode**: Add verbose logging for troubleshooting
 5. **Config File**: Support `.agentboxrc` for user preferences
-6. **WSL2 Optimizations**: Specific handling for WSL2 environments
+6. **Linux Support**: Add Linux host support for clipboard and audio bridges
 
 ## Known Technical Issues
 
