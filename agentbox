@@ -253,6 +253,52 @@ mount_additional_dirs() {
     done
 }
 
+# Prune old IDE server versions, keeping only the most recent
+prune_ide_servers() {
+    local ide_dir="${HOME}/.agentbox/ide"
+    [[ -d "$ide_dir" ]] || return 0
+
+    local pruned=false
+    for server_dir in "$ide_dir"/*/; do
+        [[ -d "$server_dir" ]] || continue
+        for sub in bin cli; do
+            local sub_dir="${server_dir}${sub}"
+            [[ -d "$sub_dir" ]] || continue
+
+            # Count version directories (commit-hash dirs)
+            local count=0
+            for _ in "$sub_dir"/*/; do ((count++)) || true; done
+            [[ $count -gt 1 ]] || continue
+
+            # Sort by mtime (newest first), delete all but the first
+            local newest=""
+            local newest_mtime=0
+            for entry in "$sub_dir"/*/; do
+                [[ -d "$entry" ]] || continue
+                local mtime
+                # stat -f %m works on macOS, stat -c %Y on Linux
+                mtime=$(stat -f %m "$entry" 2>/dev/null || stat -c %Y "$entry" 2>/dev/null || echo 0)
+                if [[ $mtime -gt $newest_mtime ]]; then
+                    newest_mtime=$mtime
+                    newest="$entry"
+                fi
+            done
+
+            for entry in "$sub_dir"/*/; do
+                [[ -d "$entry" ]] || continue
+                if [[ "$entry" != "$newest" ]]; then
+                    rm -rf "$entry"
+                    pruned=true
+                fi
+            done
+        done
+    done
+
+    if [[ "$pruned" == "true" ]]; then
+        log_info "Pruned old IDE server versions"
+    fi
+}
+
 # Run container with --rm (ephemeral)
 run_container() {
     local container_name="$1"
@@ -319,10 +365,29 @@ run_container() {
         -v "${cache_dir}/gradle:/home/agent/.gradle"
     )
 
+    # IDE server directories (shared across all projects, enables "Attach to Running Container")
+    local ide_dir="${HOME}/.agentbox/ide"
+    mkdir -p "${ide_dir}/vscode-server" "${ide_dir}/cursor-server" \
+             "${ide_dir}/windsurf-server" "${ide_dir}/zed-server"
+
+    mount_opts+=(
+        -v "${ide_dir}/vscode-server:/home/agent/.vscode-server"
+        -v "${ide_dir}/cursor-server:/home/agent/.cursor-server"
+        -v "${ide_dir}/windsurf-server:/home/agent/.windsurf-server"
+        -v "${ide_dir}/zed-server:/home/agent/.zed-server"
+    )
+
     # Mount per-project persistent data
     local project_data_dir="${HOME}/.agentbox/projects/${container_name}"
     local history_dir="${project_data_dir}/history"
     mkdir -p "${history_dir}"
+
+    # Mount config directory (for claude plugins etc)
+    local config_dir="${HOME}/.config"
+    mkdir -p "${config_dir}"
+    mount_opts+=(
+        -v "${config_dir}:/home/agent/.config"
+    )
 
     # Mount history directory (not individual files to avoid file locking issues)
     mount_opts+=(
@@ -693,6 +758,8 @@ main() {
     if [[ "$validation_failed" == "true" ]]; then
         exit 1
     fi
+
+    prune_ide_servers
 
     # Check if rebuild is needed or forced
     if [[ "$force_rebuild" == "true" ]] || needs_rebuild; then
