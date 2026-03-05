@@ -15,7 +15,7 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 
 1. **Ephemeral Containers**: Containers use `--rm` flag and are destroyed on exit. This differs from ClaudeBox's persistent slot-based containers.
 
-2. **Hash-Based Naming**: Container names use SHA256 hash of project directory path (first 12 chars) to ensure uniqueness and avoid conflicts.
+2. **Hash-Based Naming**: Container names use SHA256 hash of project directory path (first 12 chars) plus a random suffix, allowing multiple instances per project.
 
 3. **Bind Over Volume**: Claude CLI and OpenCode use bind mounts to host directories.
 
@@ -79,11 +79,11 @@ $PROJECT_DIR            # Project directory (mounted at full host path)
 <additional_dirs>       # Additional directories via --add-dir (also mounted at full host paths)
 /home/agent/.ssh        # SSH keys from ~/.agentbox/ssh/
 /home/agent/.gitconfig  # Git config (read-only)
-/home/agent/.npm        # NPM cache
-/home/agent/.cache/pip  # Pip cache
-/home/agent/.m2         # Maven cache
-/home/agent/.gradle     # Gradle cache
-/home/agent/.shell_history  # History directory (HISTFILE env var points to zsh_history inside)
+/home/agent/.npm        # NPM cache (shared across instances)
+/home/agent/.cache/pip  # Pip cache (shared across instances)
+/home/agent/.m2         # Maven cache (shared across instances)
+/home/agent/.gradle     # Gradle cache (shared across instances)
+/home/agent/.shell_history  # History directory (per-instance, auto-pruned after 30 days)
 /home/agent/.claude     # Claude config
 /home/agent/.config/opencode  # OpenCode config
 /home/agent/.local/share/opencode  # OpenCode auth
@@ -135,11 +135,13 @@ The `agentbox` script has these key functions:
 - `detect_runtime()`: Detect available container runtime (Docker or Podman)
 - `check_runtime()`: Verify a container runtime is available
 - `calculate_hash()`: SHA256 hash for change detection
+- `get_project_id()`: Stable project identifier (hash of project dir, shared across instances)
 - `needs_rebuild()`: Compare hashes with image label
 - `build_image()`: Docker build with proper args
 - `mount_additional_dirs()`: Mount extra directories with intuitive folder names (e.g., /foo, /bar)
 - `validate_dir_path()`: Validate directory paths (traversal check, system dirs, existence, duplicates)
 - `run_container()`: Main container execution logic with all mounts and command execution
+- `prune_old_history()`: Remove per-container history dirs older than 30 days
 - `ssh_setup()`: Initialize ~/.agentbox/ssh/ directory
 
 ## Critical Implementation Notes
@@ -148,7 +150,7 @@ The `agentbox` script has these key functions:
 
 2. **Path Hashing**: Container names use first 12 chars of SHA256(project_path) - collision risk is negligible
 
-3. **Container Naming**: `agentbox-<hash>` pattern ensures per-project container isolation (separate caches and history, but shared tool authentication)
+3. **Container Naming**: `agentbox-<hash>-<random>` pattern allows multiple instances per project. Package caches are shared across instances; shell history is per-instance. History dirs older than 30 days are auto-pruned.
 
 4. **Shell Mode**: When using `shell` command, execution goes through zsh even for bash (ensures environment is loaded)
 

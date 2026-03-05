@@ -84,7 +84,7 @@ agentbox ssh-init
 
 ## How It Works
 
-AgentBox creates ephemeral containers (with `--rm`) that are automatically removed when you exit. However, important data persists between sessions:
+AgentBox creates ephemeral containers (with `--rm`) that are automatically removed when you exit. Multiple instances can run simultaneously for the same project. Important data persists between sessions:
 
 ```
 Single Dockerfile → Build once → agentbox:latest image
@@ -96,8 +96,8 @@ Single Dockerfile → Build once → agentbox:latest image
           Mounts: ~/code/api    Mounts: ~/code/web     Mounts: ~/code/cli
 
 Persistent data (survives container removal):
-  Cache: ~/.cache/agentbox/agentbox-<hash>/
-  History: ~/.agentbox/projects/agentbox-<hash>/history/
+  Shared cache: ~/.cache/agentbox/<project-id>/shared/
+  Per-instance history: ~/.cache/agentbox/<project-id>/containers/<container>/history/
   Claude: ~/.claude
   OpenCode: ~/.config/opencode and ~/.local/share/opencode
 ```
@@ -183,16 +183,13 @@ Due to [Claude Code bug #6130](https://github.com/anthropics/claude-code/issues/
 
 ### Package Caches
 
-Package manager caches are stored in `~/.cache/agentbox/<container-name>/`:
+Package manager caches are shared across instances in `~/.cache/agentbox/<project-id>/shared/`:
 
-- npm packages: `~/.cache/agentbox/<container-name>/npm`
-- pip packages: `~/.cache/agentbox/<container-name>/pip`
-- Maven artifacts: `~/.cache/agentbox/<container-name>/maven`
-- Gradle cache: `~/.cache/agentbox/<container-name>/gradle`
+- npm packages, pip packages, Maven artifacts, Gradle cache
 
 ### Shell History
 
-Zsh history is preserved in `~/.agentbox/projects/<container-name>/history`
+Each container instance gets its own history in `~/.cache/agentbox/<project-id>/containers/<container>/history/`. History dirs older than 30 days are automatically pruned on startup.
 
 ### Tool Authentication
 

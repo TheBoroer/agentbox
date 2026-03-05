@@ -77,10 +77,16 @@ calculate_hash() {
     fi
 }
 
-# Get container name for current project
+# Get stable project identifier (shared across instances)
+get_project_id() {
+    echo -n "$PROJECT_DIR" | sha256sum | cut -c1-12
+}
+
+# Get unique container name for this run
 get_container_name() {
-    local project_hash=$(echo -n "$PROJECT_DIR" | sha256sum | cut -c1-12)
-    echo "${CONTAINER_PREFIX}-${project_hash}"
+    local project_hash=$(get_project_id)
+    local random_suffix=$(head -c 4 /dev/urandom | xxd -p)
+    echo "${CONTAINER_PREFIX}-${project_hash}-${random_suffix}"
 }
 
 
@@ -299,6 +305,22 @@ prune_ide_servers() {
     fi
 }
 
+# Prune container history dirs older than 30 days
+prune_old_history() {
+    local cache_base="${HOME}/.cache/agentbox"
+    [[ -d "$cache_base" ]] || return 0
+
+    local pruned=false
+    while IFS= read -r -d '' dir; do
+        rm -rf "$dir"
+        pruned=true
+    done < <(find "$cache_base"/*/containers -mindepth 1 -maxdepth 1 -type d -mtime +30 -print0 2>/dev/null)
+
+    if [[ "$pruned" == "true" ]]; then
+        log_info "Pruned container history older than 30 days"
+    fi
+}
+
 # Run container with --rm (ephemeral)
 run_container() {
     local container_name="$1"
@@ -354,15 +376,16 @@ run_container() {
     mkdir -p /tmp/clipboard-images
     mount_opts+=(-v "/tmp/clipboard-images:/tmp/clipboard-images:ro")
 
-    # Mount cache directories for package managers
-    local cache_dir="${HOME}/.cache/agentbox/${container_name}"
-    mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
+    # Mount shared cache directories for package managers (shared across instances)
+    local project_id=$(get_project_id)
+    local shared_cache_dir="${HOME}/.cache/agentbox/${project_id}/shared"
+    mkdir -p "${shared_cache_dir}/npm" "${shared_cache_dir}/pip" "${shared_cache_dir}/maven" "${shared_cache_dir}/gradle"
 
     mount_opts+=(
-        -v "${cache_dir}/npm:/home/agent/.npm"
-        -v "${cache_dir}/pip:/home/agent/.cache/pip"
-        -v "${cache_dir}/maven:/home/agent/.m2"
-        -v "${cache_dir}/gradle:/home/agent/.gradle"
+        -v "${shared_cache_dir}/npm:/home/agent/.npm"
+        -v "${shared_cache_dir}/pip:/home/agent/.cache/pip"
+        -v "${shared_cache_dir}/maven:/home/agent/.m2"
+        -v "${shared_cache_dir}/gradle:/home/agent/.gradle"
     )
 
     # IDE server directories (shared across all projects, enables "Attach to Running Container")
@@ -377,9 +400,9 @@ run_container() {
         -v "${ide_dir}/zed-server:/home/agent/.zed-server"
     )
 
-    # Mount per-project persistent data
-    local project_data_dir="${HOME}/.agentbox/projects/${container_name}"
-    local history_dir="${project_data_dir}/history"
+    # Mount per-container history (each instance gets its own history)
+    local containers_dir="${HOME}/.cache/agentbox/${project_id}/containers"
+    local history_dir="${containers_dir}/${container_name}/history"
     mkdir -p "${history_dir}"
 
     # Mount config directory (for claude plugins etc)
@@ -611,7 +634,8 @@ Environment variables (set in ~/.agentbox/.env):
                             Example: gitlab.example.com:host-gateway
 
 Containers are ephemeral and automatically removed when you exit.
-Package caches and shell history persist between sessions.
+Multiple instances can run simultaneously for the same project.
+Package caches are shared across instances; shell history is per-instance.
 
 All directories are mounted at their full host paths for symlink/path compatibility.
 
@@ -760,6 +784,7 @@ main() {
     fi
 
     prune_ide_servers
+    prune_old_history
 
     # Check if rebuild is needed or forced
     if [[ "$force_rebuild" == "true" ]] || needs_rebuild; then
