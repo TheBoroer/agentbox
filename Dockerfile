@@ -14,29 +14,29 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        # Essential tools
-        ca-certificates curl wget gnupg lsb-release sudo \
-        # Development tools
-        git vim nano tmux htop tree direnv \
-        # Build tools
-        build-essential gcc g++ make cmake pkg-config \
-        # Shell and utilities
-        zsh bash-completion locales \
-        # Network tools
-        openssh-client netcat-openbsd socat dnsutils iputils-ping \
-        # Archive tools
-        zip unzip tar gzip bzip2 xz-utils \
-        # JSON/YAML tools
-        jq yq \
-        # Process management
-        procps psmisc \
-        # Python build dependencies
-        python3-dev python3-pip python3-venv \
-        libssl-dev libffi-dev \
-        # Java dependencies
-        default-jdk maven gradle \
-        # Search tools
-        ripgrep fd-find && \
+    # Essential tools
+    ca-certificates curl wget gnupg lsb-release sudo \
+    # Development tools
+    git vim nano tmux htop tree direnv \
+    # Build tools
+    build-essential gcc g++ make cmake pkg-config \
+    # Shell and utilities
+    zsh bash-completion locales \
+    # Network tools
+    openssh-client netcat-openbsd socat dnsutils iputils-ping \
+    # Archive tools
+    zip unzip tar gzip bzip2 xz-utils \
+    # JSON/YAML tools
+    jq yq \
+    # Process management
+    procps psmisc \
+    # Python build dependencies
+    python3-dev python3-pip python3-venv \
+    libssl-dev libffi-dev \
+    # Java dependencies
+    default-jdk maven gradle \
+    # Search tools
+    ripgrep fd-find && \
     # Setup locale
     echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
     locale-gen && \
@@ -60,7 +60,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
     GLAB_VERSION=$(curl -sL "https://gitlab.com/api/v4/projects/34675721/releases/permalink/latest" | sed -n 's/.*"tag_name":"v\?\([^"]*\)".*/\1/p') && \
     echo "Installing glab version ${GLAB_VERSION} for ${ARCH}" && \
     curl -fsSL -o /tmp/glab.deb \
-        "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_${ARCH}.deb" && \
+    "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_${ARCH}.deb" && \
     dpkg -i /tmp/glab.deb || apt-get install -f -y && \
     rm /tmp/glab.deb && \
     glab --version
@@ -78,6 +78,12 @@ RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
 # Switch to user for language installations
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
+
+# Install mise
+ENV MISE_YES=1
+RUN curl https://mise.run | sh && \
+    echo 'eval "$(~/.local/bin/mise activate zsh)"' >> ~/.zshrc && \
+    echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc
 
 # Install uv for Python package management
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
@@ -102,22 +108,22 @@ RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
 # Install Node.js global packages
 RUN bash -c "source $NVM_DIR/nvm.sh && \
     npm install -g \
-        typescript \
-        @types/node \
-        ts-node \
-        eslint \
-        prettier \
-        nodemon \
-        yarn \
-        pnpm"
+    typescript \
+    @types/node \
+    ts-node \
+    eslint \
+    prettier \
+    nodemon \
+    yarn \
+    pnpm"
 
 # Install SDKMAN for Java toolchain management
 RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
     echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
     echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc && \
     bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
-        sdk install java 21.0.9-tem && \
-        sdk install gradle"
+    sdk install java 21.0.9-tem && \
+    sdk install gradle"
 
 # Setup Python tools
 RUN /home/${USERNAME}/.local/bin/uv tool install black && \
