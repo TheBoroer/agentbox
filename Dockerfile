@@ -36,7 +36,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     # Java dependencies
     default-jdk maven gradle \
     # Search tools
-    ripgrep fd-find && \
+    ripgrep fd-find \
+    # Audio (PulseAudio client for host audio bridge)
+    pulseaudio-utils && \
     # Setup locale
     echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
     locale-gen && \
@@ -202,10 +204,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # xclip shim for clipboard image bridge
 COPY bridges/clipboard-shim.sh /usr/local/bin/xclip
 RUN chmod +x /usr/local/bin/xclip
-
-# Audio bridge shim
-COPY bridges/audio-play.sh /usr/local/bin/agentbox-play
-RUN chmod +x /usr/local/bin/agentbox-play
 
 # Set the user for runtime
 USER ${USERNAME}

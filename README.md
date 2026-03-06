@@ -11,7 +11,7 @@ A container-based development environment for running agentic coding tools in a 
 - **Unified Development Environment**: Single container image with Python, Node.js, Java, and Shell support
 - **Isolated SSH**: Dedicated SSH directory for secure Git operations
 - **Clipboard Image Support**: On macOS, use Cmd+Shift+C to save a clipboard image and copy its path, then Cmd+V to paste into Claude Code inside the container. Requires [one-time setup](#clipboard-image-support).
-- **Audio Bridge**: On macOS, `agentbox-play <path>` inside the container plays sound files on the host — useful for notification hooks
+- **PulseAudio Bridge**: On macOS, full audio input/output via PulseAudio (`brew install pulseaudio`). Use `paplay`, `parecord`, etc. inside the container. [Setup details](#pulseaudio-bridge-macos).
 - **Low-Maintenance Philosophy**: Always uses latest LTS tool versions, rebuilds container automatically when necessary
 
 ## Requirements
@@ -209,6 +209,7 @@ Both tools use bind mounts to share authentication across all AgentBox projects:
 To paste screenshots into Claude Code running inside the container:
 
 1. Install the helper script and macOS Service:
+
    ```bash
    # Install helper script
    mkdir -p ~/.agentbox
@@ -218,9 +219,21 @@ To paste screenshots into Claude Code running inside the container:
    # Install Automator workflow
    cp -r bridges/Save\ Clipboard\ Image.workflow ~/Library/Services/
    ```
+
 2. Assign the keyboard shortcut: **System Settings > Keyboard > Keyboard Shortcuts > Services > General** — find "Save Clipboard Image" and assign **Cmd+Shift+C**.
 
 **Usage**: Take a screenshot, press Cmd+Shift+C (saves the image and copies its path), then Cmd+V in Claude Code to paste.
+
+## PulseAudio Bridge (macOS)
+
+Provides audio input/output inside the container via PulseAudio on the host.
+
+1. Install PulseAudio: `brew install pulseaudio`
+2. That's it — AgentBox starts/stops the PulseAudio daemon automatically.
+
+Inside the container, use `paplay`, `parecord`, `aplay`, etc. macOS system sounds are copied to `~/.agentbox/sounds/` on the host (Docker Desktop can't access `/System/Library/Sounds/` directly) and mounted at `/System/Library/Sounds/` inside the container.
+
+**Microphone permission**: macOS will prompt you to grant microphone access to your terminal app (Terminal, iTerm2, etc.) when PulseAudio starts. This happens because PulseAudio registers as an audio server that can capture mic input. The permission is needed even if you only intend to use audio output — PulseAudio requests access to all audio devices on startup. You can safely grant it; the permission only allows PulseAudio (running locally on your Mac) to access the mic, not the container directly.
 
 ## Advanced Usage
 

@@ -23,8 +23,6 @@ readonly DOCKERFILE_PATH="${SCRIPT_DIR}/Dockerfile"
 readonly ENTRYPOINT_PATH="${SCRIPT_DIR}/entrypoint.sh"
 readonly CLIPBOARD_SHIM_PATH="${SCRIPT_DIR}/bridges/clipboard-shim.sh"
 readonly CLIPBOARD_WATCHER_PATH="${SCRIPT_DIR}/bridges/clipboard-watcher.sh"
-readonly AUDIO_PLAY_PATH="${SCRIPT_DIR}/bridges/audio-play.sh"
-readonly AUDIO_BRIDGE_PATH="${SCRIPT_DIR}/bridges/audio-bridge.sh"
 readonly IMAGE_NAME="agentbox:latest"
 readonly CONTAINER_PREFIX="agentbox"
 
@@ -40,9 +38,9 @@ readonly CYAN='\033[0;36m'
 readonly NC='\033[0m' # No Color
 
 # Helper functions
-log_info() { echo -e "${BLUE}ℹ${NC}  $1"; }
+log_info() { echo -e "${BLUE}ℹ️${NC}  $1"; }
 log_success() { echo -e "${GREEN}✅${NC} $1"; }
-log_warning() { echo -e "${YELLOW}⚠${NC}  $1"; }
+log_warning() { echo -e "${YELLOW}⚠️${NC}  $1"; }
 log_error() { echo -e "${RED}❌${NC} $1" >&2; }
 log_build() { echo -e "${CYAN}🔨${NC} $1"; }
 
@@ -95,8 +93,7 @@ needs_rebuild() {
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
     local shim_hash=$(calculate_hash "$CLIPBOARD_SHIM_PATH")
-    local audio_shim_hash=$(calculate_hash "$AUDIO_PLAY_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}-${audio_shim_hash}"
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}"
 
     # Check if image exists
     if ! $RUNTIME image inspect "$IMAGE_NAME" &> /dev/null; then
@@ -120,8 +117,7 @@ build_image() {
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
     local shim_hash=$(calculate_hash "$CLIPBOARD_SHIM_PATH")
-    local audio_shim_hash=$(calculate_hash "$AUDIO_PLAY_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}-${audio_shim_hash}"
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${shim_hash}"
 
     log_build "Building AgentBox image (this may take a few minutes on first run)..."
 
@@ -321,6 +317,55 @@ prune_old_history() {
     fi
 }
 
+# PulseAudio bridge state
+PULSEAUDIO_STARTED=false
+
+setup_pulseaudio() {
+    [[ "$OSTYPE" == darwin* ]] || return 1
+
+    if ! command -v pulseaudio &>/dev/null; then
+        log_warning "PulseAudio Bridge: disabled (pulseaudio was not not found. Need to run 'brew install pulseaudio')"
+        return 1
+    fi
+
+    # Ensure TCP module is configured for container access
+    # auth-anonymous=1 is safe: only Docker containers can reach host.docker.internal
+    local pa_drop_in="/opt/homebrew/etc/pulse/default.pa.d"
+    if [[ -d "$pa_drop_in" && ! -f "$pa_drop_in/agentbox-tcp.pa" ]]; then
+        echo "load-module module-native-protocol-tcp auth-anonymous=1" > "$pa_drop_in/agentbox-tcp.pa" 2>/dev/null || true
+    fi
+
+    if pulseaudio --check 2>/dev/null; then
+        PULSEAUDIO_STARTED=false
+        # TCP module config exists but PA was started before it was added
+        pactl load-module module-native-protocol-tcp auth-anonymous=1 2>/dev/null || true
+    else
+        brew services start pulseaudio &>/dev/null || {
+            log_warning "PulseAudio Bridge: disabled (failed to start pulseaudio)"
+            return 1
+        }
+        # Wait briefly for daemon to become ready
+        local retries=10
+        while ! pulseaudio --check 2>/dev/null && ((retries-- > 0)); do
+            sleep 0.2
+        done
+        if ! pulseaudio --check 2>/dev/null; then
+            log_warning "PulseAudio Bridge: disabled (started but not responding)"
+            return 1
+        fi
+        PULSEAUDIO_STARTED=true
+    fi
+
+    log_success "PulseAudio Bridge: OK"
+    return 0
+}
+
+cleanup_pulseaudio() {
+    if [[ "$PULSEAUDIO_STARTED" == "true" ]]; then
+        brew services stop pulseaudio &>/dev/null || true
+    fi
+}
+
 # Run container with --rm (ephemeral)
 run_container() {
     local container_name="$1"
@@ -381,6 +426,8 @@ run_container() {
     local shared_cache_dir="${HOME}/.cache/agentbox/${project_id}/shared"
     mkdir -p "${shared_cache_dir}/npm" "${shared_cache_dir}/pip" "${shared_cache_dir}/maven" "${shared_cache_dir}/gradle"
 
+    log_info "Per-project container cache: ${shared_cache_dir}"
+
     mount_opts+=(
         -v "${shared_cache_dir}/npm:/home/agent/.npm"
         -v "${shared_cache_dir}/pip:/home/agent/.cache/pip"
@@ -402,8 +449,11 @@ run_container() {
 
     # Mount per-container history (each instance gets its own history)
     local containers_dir="${HOME}/.cache/agentbox/${project_id}/containers"
+    local container_dir="${containers_dir}/${container_name}"
     local history_dir="${containers_dir}/${container_name}/history"
     mkdir -p "${history_dir}"
+
+    log_info "Per-container directory: ${container_dir}"
 
     # Mount config directory (for claude plugins etc)
     local config_dir="${HOME}/.config"
@@ -547,18 +597,21 @@ run_container() {
         mkdir -p "$clipboard_dir"
         "$CLIPBOARD_WATCHER_PATH" "$clipboard_dir" &
         watcher_pid=$!
-        log_info "Clipboard image bridge started"
+        log_success "Clipboard Image Bridge: OK"
     fi
 
-    # Start audio bridge (macOS only)
-    local audio_bridge_pid=""
-    local audio_dir=""
-    if [[ "$OSTYPE" == darwin* ]]; then
-        audio_dir=$(mktemp -d)
-        "$AUDIO_BRIDGE_PATH" "$audio_dir" &
-        audio_bridge_pid=$!
-        mount_opts+=(-v "${audio_dir}:/home/agent/.agentbox-audio")
-        log_info "Audio bridge started"
+    # PulseAudio bridge (macOS only)
+    if setup_pulseaudio; then
+        mount_opts+=(
+            --env "PULSE_SERVER=tcp:host.docker.internal:4713"
+        )
+        # Copy macOS system sounds to a Docker-accessible location
+        local sounds_dir="${HOME}/.agentbox/sounds"
+        if [[ -d "/System/Library/Sounds" ]]; then
+            mkdir -p "$sounds_dir"
+            rsync -a --quiet /System/Library/Sounds/ "$sounds_dir/"
+            mount_opts+=(-v "${sounds_dir}:/System/Library/Sounds:ro")
+        fi
     fi
 
     # Run ephemeral container with --rm
@@ -582,11 +635,7 @@ run_container() {
         rm -rf "$PROJECT_DIR/.agentbox-clipboard" 2>/dev/null || true
     fi
 
-    if [[ -n "$audio_bridge_pid" ]]; then
-        kill "$audio_bridge_pid" 2>/dev/null || true
-        wait "$audio_bridge_pid" 2>/dev/null || true
-        rm -rf "$audio_dir" 2>/dev/null || true
-    fi
+    cleanup_pulseaudio
 
     return "$container_exit"
 }
